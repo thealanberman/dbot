@@ -25,13 +25,26 @@ def respond(err, res=None):
     }
 
 
-def parse_command_text(username, command_text):
+def parse_command_text(username, channel, command_text):
     '''Calls appropriate action for text passed. Returns response message to Slack.'''
-    logger.info("command_text[0]: {}".format(command_text[0]))
+    action = command_text[0]
+    public = False
+    arguments = command_text[1:]
+    logger.info("action: {}".format(action))
+
+    # CREATE character
+    if action == "create" and len(command_text) >= 2:
+        response = create_character(username, channel, arguments)
+        # TODO what does this return when the character already exists?
+        if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+            message = "CHARACTER: %s [CREATED]\n" % command_text[1]
+        else:
+            message = "Something borked and the Character could not be created."
+        
 
     # SET stat
-    if command_text[0] == "set" and len(command_text) == 4:
-        response = set_value(username, command_text[1:])
+    elif action == "set" and len(command_text) == 4:
+        response = set_value(username, channel, arguments)
         if response['ResponseMetadata']['HTTPStatusCode'] == 200:
             message = "Value set!\n"
             message += "CHARACTER: %s\n" % command_text[1]
@@ -40,12 +53,16 @@ def parse_command_text(username, command_text):
             message = "Something borked and the value could not be set."
 
     # GET stat
-    elif command_text[0] == "get" and len(command_text) >= 2:
-        message = get_value(username, command_text[1:])
+    elif action == "get" and len(command_text) >= 2:
+        message = get_value(username, channel, arguments)
+
+    elif action == "show" and len(command_text) >=2:
+        message = get_value(username, channel, arguments)
+        public = True
 
     # DEL stat
-    elif command_text[0] == "del" and len(command_text) == 3:
-        response = del_value(username, command_text[1:])
+    elif action == "del" and len(command_text) == 3:
+        response = del_value(username, channel, arguments)
         if response['ResponseMetadata']['HTTPStatusCode'] == 200:
             message = "CHARACTER: %s\n" % command_text[1]
             message += "%s: (Deleted)\n" % (command_text[2].upper())
@@ -56,29 +73,7 @@ def parse_command_text(username, command_text):
     else:
         message = help_usage()
 
-    return message
-
-
-def lambda_handler(event, context):
-    # params = parse_qs(event['body'].encode('ASCII'))
-    params = parse_qs(event['body'])
-    token = params['token'][0]
-    if token != slack_token:
-        logger.error("Request token (%s) does not match expected", token)
-        return respond(Exception('Invalid request token'))
-
-    user = params['user_name'][0]
-    command = params['command'][0]
-    channel = params['channel_name'][0]
-    command_text = params['text'][0].split()
-
-    # message = help_usage()
-    logger.info("text: {}".format(command_text))
-    logger.info("user: {}".format(user))
-    message = parse_command_text(user, command_text)
-
-    return respond(None, {'text': message, 'response_type':
-                          'in_channel', 'user_name': 'DBot'})
+    return {'public': public, 'message': message }
 
 
 def help_usage():
@@ -91,25 +86,78 @@ def help_usage():
     return response
 
 
-def set_value(slack_username, charval):
+def create_character(slack_username, channel, charval):
+    '''Creates a new character'''
+    logger.info("slack_username: {}".format(slack_username))
+    logger.info("channel: {}".format(channel))
+    character = charval[0]
+
+    # gm is same as character unless specified otherwise
+    try: 
+        gm = charval[1]
+    else:
+        gm = charval[0]
+
+    try:
+        response = dbot.update_item(
+            Key={
+                'username': slack_username,
+                'character_channel': character.lower() + slack_channel.lower()
+            },
+            UpdateExpression="set stats.displayname = %s, stats.gm = %s:" % (character, gm)
+            ConditionExpression="attribute_not_exists(:charchan)",
+            ExpressionAttributeValues={
+                ':charchan': character_channel
+            },
+            ReturnValues="UPDATED_NEW"
+        )
+    except ClientError as e:
+        logger.info("Error: {}".format(e.response['Error']['Message']))
+
+    logger.info("response: {}".format(response))
+    return response
+
+
+def set_value(slack_username, channel, charval):
     '''Sets a stat of the character record passed'''
     logger.info("slack_username: {}".format(slack_username))
+    logger.info("channel: {}".format(channel))
     character, key, value = charval[0], charval[1], charval[2]
 
     try:
         response = dbot.update_item(
             Key={
                 'username': slack_username,
-                'character': character
+                'character_channel': character.lower() + slack_channel.lower()
             },
             UpdateExpression="set stats.%s = :v" % key,
+            ConditionExpression="attribute_exists(:charchan)",
             ExpressionAttributeValues={
-                ':v': value
+                ':v': value,
+                ':charchan': character_channel
             },
             ReturnValues="UPDATED_NEW"
         )
     except ClientError as e:
-        print(e.response['Error']['Message'])
+        logger.info("Error: {}".format(e.response['Error']['Message']))
+    else:
+        try:
+            response = dbot.update_item(
+                Key={
+                    'username': slack_username,
+                    'character_channel': character.lower() + slack_channel.lower()
+                },
+                UpdateExpression="set stats.%s = :v, stats.displayname = :char, stats.gm = :char" % key,
+                ConditionExpression="attribute_not_exists(:charchan)",
+                ExpressionAttributeValues={
+                    ':v': value,
+                    ':charchan': character_channel
+                },
+                ReturnValues="UPDATED_NEW"
+            )
+        except ClientError as e:
+            logger.info("Error: {}".format(e.response['Error']['Message']))
+            
 
     logger.info("response: {}".format(response))
     return response
@@ -166,3 +214,30 @@ def del_value(slack_username, charval):
 
     logger.info("response: {}".format(response))
     return response
+
+
+def lambda_handler(event, context):
+    '''Main function triggered by the Lambda'''
+    params = parse_qs(event['body'].encode('ASCII'))
+    # params = parse_qs(event['body'])
+    token = params['token'][0]
+    if token != slack_token:
+        logger.error("Request token (%s) does not match expected", token)
+        return respond(Exception('Invalid request token'))
+
+    user = params['user_name'][0]
+    command = params['command'][0]
+    channel = params['channel_name'][0]
+    command_text = params['text'][0].split()
+
+    # message = help_usage()
+    logger.info("text: {}".format(command_text))
+    logger.info("user: {}".format(user))
+    action = parse_command_text(user, channel, command_text)
+    if action['public']:
+        response_type = "in_channel"
+    else:
+        response_type = "ephemeral"
+
+    return respond(None, {'text': action['message'], 'response_type':
+                          response_type, 'user_name': 'DBot'})
