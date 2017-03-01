@@ -35,12 +35,12 @@ def parse_command_text(username, channel, command_text):
     # CREATE character
     if action == "create" and len(command_text) >= 2:
         response = create_character(username, channel, arguments)
-        # TODO what does this return when the character already exists?
+# TODO what does this return when the character already exists
         if response['ResponseMetadata']['HTTPStatusCode'] == 200:
             message = "CHARACTER: %s [CREATED]\n" % command_text[1]
         else:
             message = "Something borked and the Character could not be created."
-        
+
 
     # SET stat
     elif action == "set" and len(command_text) == 4:
@@ -56,7 +56,7 @@ def parse_command_text(username, channel, command_text):
     elif action == "get" and len(command_text) >= 2:
         message = get_value(username, channel, arguments)
 
-    elif action == "show" and len(command_text) >=2:
+    elif action == "show" and len(command_text) >= 2:
         message = get_value(username, channel, arguments)
         public = True
 
@@ -66,6 +66,10 @@ def parse_command_text(username, channel, command_text):
         if response['ResponseMetadata']['HTTPStatusCode'] == 200:
             message = "CHARACTER: %s\n" % command_text[1]
             message += "%s: (Deleted)\n" % (command_text[2].upper())
+        elif response['ResponseMetadata']['HTTPStatusCode'] == "displayname":
+            message = "Sorry, you can't delete displayname. You can `set` it to something else, but you will still need to reference your character by it's original name."
+        elif response['ResponseMetadata']['HTTPStatusCode'] == "gm":
+            message = "gm has been reset to %s. Now only %s can modify %s.\n" % (username, username, command_text[1])
         else:
             message = "Something borked and the value could not be deleted."
 
@@ -73,16 +77,20 @@ def parse_command_text(username, channel, command_text):
     else:
         message = help_usage()
 
-    return {'public': public, 'message': message }
+    return {'public': public, 'message': message}
 
 
 def help_usage():
     '''Returns help screen'''
-    response = "You may either 'set' or 'get' a value.\n"
+    response = "You may either `create` `set` `get` or `del`.\n"
     response += "Example Usage:\n"
-    response += "`set trogdor str 18` (sets the value of trogdor's str to 18)\n"
-    response += "`get trogdor` (returns all of trogdor's values)\n"
-    response += "`get trogdor str` (returns just trogdor's str)"
+    response += "`create Trogdor` (creates a new Trogdor character)\n"
+    response += "`create Trogdor johndoe` (creates a new Trogdor character with johndoe as the GM)\n"
+    response += "`set trogdor str 18` (sets the value of Trogdor's str to 18)\n"
+    response += "`get trogdor` (returns all of Trogdor's stats privately)\n"
+    response += "`get trogdor str` (returns just Trogdor's str)\n"
+    response += "`show trogdor` (returns Trogdor's stats publicly)\n"
+    response += "`del trogdor str` (deletes Trogdor's str entirely)"
     return response
 
 
@@ -91,25 +99,26 @@ def create_character(slack_username, channel, charval):
     logger.info("slack_username: {}".format(slack_username))
     logger.info("channel: {}".format(channel))
     character = charval[0]
+    character_channel = character.lower() + channel.lower()
 
     # gm is same as character unless specified otherwise
-    try: 
-        gm = charval[1]
-    else:
-        gm = charval[0]
+    try:
+        game_master = charval[1]
+    except IndexError:
+        game_master = slack_username
 
     try:
-        response = dbot.update_item(
-            Key={
+        response = dbot.put_item(
+            Item={
                 'username': slack_username,
-                'character_channel': character.lower() + slack_channel.lower()
+                'character_channel': character_channel,
+                'stats': {
+                    'displayname': character,
+                    'gm': game_master
+                }
             },
-            UpdateExpression="set stats.displayname = %s, stats.gm = %s:" % (character, gm)
-            ConditionExpression="attribute_not_exists(:charchan)",
-            ExpressionAttributeValues={
-                ':charchan': character_channel
-            },
-            ReturnValues="UPDATED_NEW"
+            ConditionExpression="attribute_not_exists(character_channel)",
+            ReturnValues="NONE"
         )
     except ClientError as e:
         logger.info("Error: {}".format(e.response['Error']['Message']))
@@ -123,55 +132,42 @@ def set_value(slack_username, channel, charval):
     logger.info("slack_username: {}".format(slack_username))
     logger.info("channel: {}".format(channel))
     character, key, value = charval[0], charval[1], charval[2]
+    character_channel = character.lower() + channel.lower()
 
     try:
         response = dbot.update_item(
             Key={
                 'username': slack_username,
-                'character_channel': character.lower() + slack_channel.lower()
+                'character_channel': character_channel
             },
             UpdateExpression="set stats.%s = :v" % key,
-            ConditionExpression="attribute_exists(:charchan)",
             ExpressionAttributeValues={
-                ':v': value,
-                ':charchan': character_channel
+                ':v': value
             },
             ReturnValues="UPDATED_NEW"
         )
     except ClientError as e:
         logger.info("Error: {}".format(e.response['Error']['Message']))
-    else:
-        try:
-            response = dbot.update_item(
-                Key={
-                    'username': slack_username,
-                    'character_channel': character.lower() + slack_channel.lower()
-                },
-                UpdateExpression="set stats.%s = :v, stats.displayname = :char, stats.gm = :char" % key,
-                ConditionExpression="attribute_not_exists(:charchan)",
-                ExpressionAttributeValues={
-                    ':v': value,
-                    ':charchan': character_channel
-                },
-                ReturnValues="UPDATED_NEW"
-            )
-        except ClientError as e:
-            logger.info("Error: {}".format(e.response['Error']['Message']))
-            
 
     logger.info("response: {}".format(response))
     return response
 
 
-def get_value(slack_username, charval, k=None):
+def get_value(slack_username, channel, charval):
     '''Returns the value(s) of the character record passed'''
     character = charval[0]
+    character_channel = character.lower() + channel.lower()
+
+    try:
+        k = charval[1]
+    except IndexError:
+        k = ""
 
     try:
         response = dbot.get_item(
             Key={
                 'username': slack_username,
-                'character': character
+                'character_channel': character_channel
             }
         )
     except ClientError as e:
@@ -182,29 +178,37 @@ def get_value(slack_username, charval, k=None):
 
     logger.info("response: {}".format(response))
 
-    if k is None:
-        k = ""
-        message = "CHARACTER: %s\n" % character
+    if k == "":
+        message = "*%s*\n" % response['Item']['stats']['displayname']
+        del response['Item']['stats']['displayname']
+        message += "GM: %s\n" % response['Item']['stats']['gm']
+        del response['Item']['stats']['gm']
         for key, value in sorted(response['Item']['stats'].iteritems()):
-            logger.info("{}: {}".format(key, value))
+            # logger.info("{}: {}".format(key, value))
             message += "%s: %s\n" % (key.upper(), value)
     else:
-        k = k.upper() + ": " + response['Item']['stats'][k]
-        message = "CHARACTER: %s\n%s" % (character, k)
+        message = "*%s*\n" % response['Item']['stats']['displayname']
+        message += k.upper() + ": " + response['Item']['stats'][k]
 
     return message
 
 
-def del_value(slack_username, charval):
+def del_value(slack_username, channel, charval):
     '''Deletes a stat from a character'''
     logger.info("slack_username: {}".format(slack_username))
     character, key = charval[0], charval[1]
+    character_channel = character.lower() + channel.lower()
+
+    if key == "gm":
+        return {'ResponseMetadata': {'HTTPStatusCode': 'gm'}}
+    elif key == "displayname":
+        return {'ResponseMetadata': {'HTTPStatusCode': 'displayname'}}
 
     try:
         response = dbot.update_item(
             Key={
                 'username': slack_username,
-                'character': character
+                'character_channel': character_channel
             },
             UpdateExpression="REMOVE stats.%s" % key,
             ReturnValues="UPDATED_NEW"
