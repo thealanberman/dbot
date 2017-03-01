@@ -110,7 +110,7 @@ def create_character(slack_username, channel, charval):
     try:
         response = dbot.put_item(
             Item={
-                'character_channel': character_channel
+                'character_channel': character_channel,
                 'stats': {
                     'owner': slack_username,
                     'displayname': character,
