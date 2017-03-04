@@ -80,6 +80,7 @@ def parse_command_text(username, channel, command_text):
     return {'public': public, 'message': message}
 
 
+
 def help_usage():
     '''Returns help screen'''
     response = "You may either `create` `set` `get` or `del`.\n"
@@ -92,6 +93,7 @@ def help_usage():
     response += "`show trogdor` (returns Trogdor's stats publicly)\n"
     response += "`del trogdor str` (deletes Trogdor's str entirely)"
     return response
+
 
 
 def create_character(slack_username, channel, charval):
@@ -127,6 +129,7 @@ def create_character(slack_username, channel, charval):
     return response
 
 
+
 def set_value(slack_username, channel, charval):
     '''Sets a stat of the character record passed'''
     logger.info("slack_username: {}".format(slack_username))
@@ -137,7 +140,6 @@ def set_value(slack_username, channel, charval):
     try:
         response = dbot.update_item(
             Key={
-                'username': slack_username,
                 'character_channel': character_channel
             },
             UpdateExpression="set stats.%s = :v" % key,
@@ -153,6 +155,7 @@ def set_value(slack_username, channel, charval):
     return response
 
 
+
 def get_value(slack_username, channel, charval):
     '''Returns the value(s) of the character record passed'''
     character = charval[0]
@@ -166,7 +169,6 @@ def get_value(slack_username, channel, charval):
     try:
         response = dbot.get_item(
             Key={
-                'username': slack_username,
                 'character_channel': character_channel
             }
         )
@@ -193,6 +195,7 @@ def get_value(slack_username, channel, charval):
     return message
 
 
+
 def del_value(slack_username, channel, charval):
     '''Deletes a stat from a character'''
     logger.info("slack_username: {}".format(slack_username))
@@ -207,7 +210,6 @@ def del_value(slack_username, channel, charval):
     try:
         response = dbot.update_item(
             Key={
-                'username': slack_username,
                 'character_channel': character_channel
             },
             UpdateExpression="REMOVE stats.%s" % key,
@@ -218,6 +220,7 @@ def del_value(slack_username, channel, charval):
 
     logger.info("response: {}".format(response))
     return response
+
 
 
 def lambda_handler(event, context):
