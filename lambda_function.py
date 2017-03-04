@@ -70,6 +70,8 @@ def parse_command_text(username, channel, command_text):
             message = "Sorry, you can't delete displayname. You can `set` it to something else, but you will still need to reference your character by it's original name."
         elif response['ResponseMetadata']['HTTPStatusCode'] == "gm":
             message = "gm has been reset to %s. Now only %s can modify %s.\n" % (username, username, command_text[1])
+        elif response['ResponseMetadata']['HTTPStatusCode'] == "owner":
+            message = "Sorry, you can't delete the owner."
         else:
             message = "Something borked and the value could not be deleted."
 
@@ -86,7 +88,7 @@ def help_usage():
     response = "You may either `create` `set` `get` or `del`.\n"
     response += "Example Usage:\n"
     response += "`create Trogdor` (creates a new Trogdor character)\n"
-    response += "`create Trogdor johndoe` (creates a new Trogdor character with johndoe as the GM)\n"
+    response += "`create Trogdor johndoe` (creates a new character 'Trogdor' with GM 'johndoe')\n"
     response += "`set trogdor str 18` (sets the value of Trogdor's str to 18)\n"
     response += "`get trogdor` (returns all of Trogdor's stats privately)\n"
     response += "`get trogdor str` (returns just Trogdor's str)\n"
@@ -177,6 +179,8 @@ def get_value(slack_username, channel, charval):
 
     if "Item" not in response:
         return "No such character."
+    if response['Item']['stats']['owner'] != slack_username and response['Item']['stats']['gm'] != slack_username:
+        return "You are not the owner or the GM for that character."
 
     logger.info("response: {}".format(response))
 
@@ -206,6 +210,8 @@ def del_value(slack_username, channel, charval):
         return {'ResponseMetadata': {'HTTPStatusCode': 'gm'}}
     elif key == "displayname":
         return {'ResponseMetadata': {'HTTPStatusCode': 'displayname'}}
+    elif key == "owner":
+        return {'ResponseMetadata': {'HTTPStatusCode': 'owner'}}
 
     try:
         response = dbot.update_item(
@@ -217,6 +223,11 @@ def del_value(slack_username, channel, charval):
         )
     except ClientError as e:
         print(e.response['Error']['Message'])
+
+    if "Item" not in response:
+        return "No such character."
+    if response['Item']['stats']['owner'] != slack_username and response['Item']['stats']['gm'] != slack_username:
+        return "You are not the owner or the GM for that character."
 
     logger.info("response: {}".format(response))
     return response
@@ -233,7 +244,7 @@ def lambda_handler(event, context):
         return respond(Exception('Invalid request token'))
 
     user = params['user_name'][0]
-    command = params['command'][0]
+    # command = params['command'][0]
     channel = params['channel_name'][0]
     command_text = params['text'][0].split()
 
