@@ -141,14 +141,12 @@ def set_value(slack_username, channel, charval):
         logger.info("response: {}".format(response))
     except ClientError as e:
         logger.info("Error: {}".format(e.response['Error']['Message']))
-        response = {'ResponseMetadata': {'HTTPStatusCode': 403}}
+        return "No such character or you do not have permission."
 
     if response['ResponseMetadata']['HTTPStatusCode'] == 200:
         message = "Value set!\n"
         message += "CHARACTER: %s\n" % character
         message += "%s: %s\n" % (key.upper(), value)
-    elif response['ResponseMetadata']['HTTPStatusCode'] == 403:
-        message = "You do not have permission."
     else:
         message = "Something borked and the value could not be set."
 
