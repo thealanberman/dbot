@@ -1,3 +1,4 @@
+'''Lambda Function for storing character sheets in DynamoDB from Slack slash command'''
 from __future__ import print_function
 
 import json
@@ -6,7 +7,6 @@ import os
 from urlparse import parse_qs
 
 import boto3
-# from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
@@ -15,52 +15,6 @@ logger.setLevel(logging.INFO)
 slack_token = os.environ['slack_token']
 
 dbot = boto3.resource('dynamodb', region_name='us-east-1').Table('dbot')
-
-def respond(err, res=None):
-    return {
-        'statusCode': '400' if err else '200',
-        'body': err.message if err else json.dumps(res),
-        'headers': {
-            'Content-Type': 'application/json'
-        },
-    }
-
-
-def parse_command_text(username, channel, command_text):
-    '''Calls appropriate action for text passed. Returns response message to Slack.'''
-    action = command_text[0]
-    public = False
-    arguments = command_text[1:]
-
-    # CREATE character
-    if action == "create" and len(command_text) >= 2:
-        message = create_character(username, channel, arguments)
-
-    # SET stat
-    elif action == "set" and len(command_text) == 4:
-        message = set_value(username, channel, arguments)
-
-    # GET stat
-    elif action == "get" and len(command_text) >= 2:
-        message = get_value(username, channel, arguments)
-
-    # SHOW stat
-    elif action == "show" and len(command_text) >= 2:
-        message = get_value(username, channel, arguments)
-        public = True
-
-    # DEL stat
-    elif action == "del" and len(command_text) == 3:
-        message = del_value(username, channel, arguments)
-
-    # HELP screen
-    else:
-        message = help_usage()
-        public = True
-
-    return {'public': public, 'message': message}
-# END parse_command_text
-
 
 def help_usage():
     '''Returns help screen'''
@@ -74,11 +28,11 @@ def help_usage():
     response += "`show trogdor` (returns Trogdor's stats publicly)\n"
     response += "`del trogdor str` (deletes Trogdor's str entirely)"
     return response
-# END help_usage
+
 
 
 def create_character(slack_username, channel, charval):
-    '''Creates a new character. Returns HTTPStatusCode.'''
+    '''Creates a new character.'''
     character = charval[0]
     character_channel = character.lower() + channel.lower()
 
@@ -112,14 +66,11 @@ def create_character(slack_username, channel, charval):
         message = "Something borked and the Character could not be created."
 
     return message
-# END create_character
 
 
 
 def set_value(slack_username, channel, charval):
     '''Sets a stat of the character record passed'''
-    # logger.info("slack_username: {}".format(slack_username))
-    # logger.info("channel: {}".format(channel))
     character, key, value = charval[0], charval[1], charval[2]
     character_channel = character.lower() + channel.lower()
 
@@ -149,7 +100,7 @@ def set_value(slack_username, channel, charval):
         message = "Something borked and the value could not be set."
 
     return message
-# END set_value
+
 
 
 def get_value(slack_username, channel, charval):
@@ -195,7 +146,7 @@ def get_value(slack_username, channel, charval):
         message += k.upper() + ": " + response['Item']['stats'][k]
 
     return message
-# END get_value
+
 
 
 def del_value(slack_username, channel, charval):
@@ -238,6 +189,42 @@ def del_value(slack_username, channel, charval):
 
 
 
+def parse_command_text(username, channel, command_text):
+    '''Calls appropriate action for text passed. Returns response message to Slack.'''
+    action = command_text[0]
+    public = False
+    arguments = command_text[1:]
+
+    # CREATE character
+    if action == "create" and len(command_text) >= 2:
+        message = create_character(username, channel, arguments)
+
+    # SET stat
+    elif action == "set" and len(command_text) == 4:
+        message = set_value(username, channel, arguments)
+
+    # GET stat
+    elif action == "get" and len(command_text) >= 2:
+        message = get_value(username, channel, arguments)
+
+    # SHOW stat
+    elif action == "show" and len(command_text) >= 2:
+        message = get_value(username, channel, arguments)
+        public = True
+
+    # DEL stat
+    elif action == "del" and len(command_text) == 3:
+        message = del_value(username, channel, arguments)
+
+    # HELP screen
+    else:
+        message = help_usage()
+        public = True
+
+    return {'public': public, 'message': message}
+
+
+
 def lambda_handler(event, context):
     '''Main function triggered by the Lambda'''
     params = parse_qs(event['body'].encode('ASCII'))
@@ -266,3 +253,15 @@ def lambda_handler(event, context):
 
     return respond(None, {'text': action['message'], 'response_type':
                           response_type, 'user_name': 'DBot'})
+
+
+
+def respond(err, res=None):
+    '''Responds on behalf of the Lambda function'''
+    return {
+        'statusCode': '400' if err else '200',
+        'body': err.message if err else json.dumps(res),
+        'headers': {
+            'Content-Type': 'application/json'
+        },
+    }
