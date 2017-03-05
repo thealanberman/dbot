@@ -1,11 +1,12 @@
 from __future__ import print_function
 
-from urlparse import parse_qs
 import json
 import logging
 import os
+from urlparse import parse_qs
+
 import boto3
-from boto3.dynamodb.conditions import Key, Attr
+from boto3.dynamodb.conditions import Attr, Key
 from botocore.exceptions import ClientError
 
 logger = logging.getLogger()
