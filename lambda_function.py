@@ -105,7 +105,7 @@ def create_character(slack_username, channel, charval):
     except ClientError as e:
         logger.info("Error: {}".format(e.response['Error']['Message']))
         response = {'ResponseMetadata': {'HTTPStatusCode': 403}}
-    
+
     if response['ResponseMetadata']['HTTPStatusCode'] == 200:
         message = "CHARACTER: %s [CREATED]\n" % character
     elif response['ResponseMetadata']['HTTPStatusCode'] == 403:
