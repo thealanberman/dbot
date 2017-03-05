@@ -208,11 +208,11 @@ def del_value(slack_username, channel, charval):
     character_channel = character.lower() + channel.lower()
 
     if key == "gm":
-        return {'ResponseMetadata': {'HTTPStatusCode': 'gm'}}
+        return "Can't delete that. You can `set` it to someone else (including yourself)."
     elif key == "displayname":
-        return {'ResponseMetadata': {'HTTPStatusCode': 'displayname'}}
+        return "Can't delete that. You can `set` it to something else, but you will still need to reference your character by %s." % character
     elif key == "owner_slackname":
-        return {'ResponseMetadata': {'HTTPStatusCode': 'owner_slackname'}}
+        return "Can't delete that."
 
     try:
         response = dbot.update_item(
@@ -230,16 +230,10 @@ def del_value(slack_username, channel, charval):
     if "Item" not in response:
         message = "No such character."
     elif response['Item']['stats']['owner_slackname'] != slack_username and response['Item']['stats']['gm'] != slack_username:
-        message = "You do not have permission to modify that character."
-    elif key == "displayname":
-        message = "Sorry, you can't delete that. You can `set` it to something else, but you will still need to reference your character by %s." % character
-    elif key == "owner_slackname":
-        message = "Sorry, you can't delete that."
+        message = "Don't have permission to modify that character."
     elif response['ResponseMetadata']['HTTPStatusCode'] == 200:
         message = "CHARACTER: %s\n" % character
         message += "%s: (Deleted)\n" % key.upper()
-    elif response['ResponseMetadata']['HTTPStatusCode'] == "gm":
-        message = "GM has been reset. Now only %s can modify %s.\n" % (slack_username, character)
     else:
         message = "Something borked and the value could not be deleted."
 
