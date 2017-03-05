@@ -104,12 +104,10 @@ def create_character(slack_username, channel, charval):
         logger.info("response: {}".format(response))
     except ClientError as e:
         logger.info("Error: {}".format(e.response['Error']['Message']))
-        response = {'ResponseMetadata': {'HTTPStatusCode': 403}}
+        return "A character by that name already exists."
 
     if response['ResponseMetadata']['HTTPStatusCode'] == 200:
         message = "CHARACTER: %s [CREATED]\n" % character
-    elif response['ResponseMetadata']['HTTPStatusCode'] == 403:
-        message = "A character by that name already exists."
     else:
         message = "Something borked and the Character could not be created."
 
