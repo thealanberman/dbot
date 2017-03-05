@@ -172,8 +172,9 @@ def get_value(slack_username, channel, charval):
                 'character_channel': character_channel
             }
         )
+        logger.info("response: {}".format(response))
     except ClientError as e:
-        print(e.response['Error']['Message'])
+        logger.info("Error: {}".format(e.response['Error']['Message']))
         response = {'ResponseMetadata': {'HTTPStatusCode': 403}}
 
     if "Item" not in response:
@@ -220,6 +221,10 @@ def del_value(slack_username, channel, charval):
                 'character_channel': character_channel
             },
             UpdateExpression="REMOVE stats.%s" % key,
+            ConditionExpression="stats.owner_slackname = :slackuser OR stats.gm = :slackuser",
+            ExpressionAttributeValues={
+                ':slackuser': slack_username
+            },
             ReturnValues="UPDATED_NEW"
         )
         logger.info("response: {}".format(response))
