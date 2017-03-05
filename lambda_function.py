@@ -189,6 +189,8 @@ def get_value(slack_username, channel, charval):
     if k == "":
         message = "*%s*\n" % response['Item']['stats']['displayname']
         del response['Item']['stats']['displayname']
+        message += "OWNER: %s\n" % response['Item']['stats']['owner_slackname']
+        del response['Item']['stats']['owner_slackname']
         message += "GM: %s\n" % response['Item']['stats']['gm']
         del response['Item']['stats']['gm']
         for key, value in sorted(response['Item']['stats'].iteritems()):
@@ -248,7 +250,10 @@ def lambda_handler(event, context):
     user = params['user_name'][0]
     # command = params['command'][0]
     channel = params['channel_name'][0]
-    command_text = params['text'][0].split()
+    try:
+        command_text = params['text'][0].split()
+    except KeyError:
+        command_text = ['help']
 
     # message = help_usage()
     logger.info("text: {}".format(command_text))
