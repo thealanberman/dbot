@@ -230,13 +230,11 @@ def del_value(slack_username, channel, charval):
         logger.info("response: {}".format(response))
     except ClientError as e:
         logger.info("Error: {}".format(e.response['Error']['Message']))
-        response = {'ResponseMetadata': {'HTTPStatusCode': 403}}
+        return "No such character or you don't have permission to modify that character."
 
     if response['ResponseMetadata']['HTTPStatusCode'] == 200:
         message = "CHARACTER: %s\n" % character
         message += "%s: (Deleted)\n" % key.upper()
-    elif response['ResponseMetadata']['HTTPStatusCode'] == 403:
-        message = "No such character or you don't have permission to modify that character."
     else:
         message = "Something borked and the value could not be deleted."
 
