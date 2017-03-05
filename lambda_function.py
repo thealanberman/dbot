@@ -31,57 +31,35 @@ def parse_command_text(username, channel, command_text):
     action = command_text[0]
     public = False
     arguments = command_text[1:]
-    logger.info("action: {}".format(action))
 
     # CREATE character
     if action == "create" and len(command_text) >= 2:
-        response = create_character(username, channel, arguments)
-# TODO what does this return when the character already exists
-        if response['ResponseMetadata']['HTTPStatusCode'] == 200:
-            message = "CHARACTER: %s [CREATED]\n" % command_text[1]
-        else:
-            message = "Something borked and the Character could not be created."
-
+        message = create_character(username, channel, arguments)
 
     # SET stat
     elif action == "set" and len(command_text) == 4:
-        response = set_value(username, channel, arguments)
-        if response['ResponseMetadata']['HTTPStatusCode'] == 200:
-            message = "Value set!\n"
-            message += "CHARACTER: %s\n" % command_text[1]
-            message += "%s: %s\n" % (command_text[2].upper(), command_text[3])
-        else:
-            message = "Something borked and the value could not be set."
+        message = set_value(username, channel, arguments)
 
     # GET stat
     elif action == "get" and len(command_text) >= 2:
         message = get_value(username, channel, arguments)
 
+    # SHOW stat
     elif action == "show" and len(command_text) >= 2:
         message = get_value(username, channel, arguments)
         public = True
 
     # DEL stat
     elif action == "del" and len(command_text) == 3:
-        response = del_value(username, channel, arguments)
-        if response['ResponseMetadata']['HTTPStatusCode'] == 200:
-            message = "CHARACTER: %s\n" % command_text[1]
-            message += "%s: (Deleted)\n" % (command_text[2].upper())
-        elif response['ResponseMetadata']['HTTPStatusCode'] == "displayname":
-            message = "Sorry, you can't delete displayname. You can `set` it to something else, but you will still need to reference your character by it's original name."
-        elif response['ResponseMetadata']['HTTPStatusCode'] == "gm":
-            message = "gm has been reset to %s. Now only %s can modify %s.\n" % (username, username, command_text[1])
-        elif response['ResponseMetadata']['HTTPStatusCode'] == "owner_slackname":
-            message = "Sorry, you can't delete the owner."
-        else:
-            message = "Something borked and the value could not be deleted."
+        message = del_value(username, channel, arguments)
 
     # HELP screen
     else:
         message = help_usage()
+        public = True
 
     return {'public': public, 'message': message}
-
+# END parse_command_text
 
 
 def help_usage():
@@ -96,13 +74,11 @@ def help_usage():
     response += "`show trogdor` (returns Trogdor's stats publicly)\n"
     response += "`del trogdor str` (deletes Trogdor's str entirely)"
     return response
-
+# END help_usage
 
 
 def create_character(slack_username, channel, charval):
-    '''Creates a new character'''
-    logger.info("slack_username: {}".format(slack_username))
-    logger.info("channel: {}".format(channel))
+    '''Creates a new character. Returns HTTPStatusCode.'''
     character = charval[0]
     character_channel = character.lower() + channel.lower()
 
@@ -125,18 +101,27 @@ def create_character(slack_username, channel, charval):
             ConditionExpression="attribute_not_exists(character_channel)",
             ReturnValues="NONE"
         )
+        logger.info("response: {}".format(response))
     except ClientError as e:
         logger.info("Error: {}".format(e.response['Error']['Message']))
+        response = {'ResponseMetadata': {'HTTPStatusCode': 403}}
+    
+    if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+        message = "CHARACTER: %s [CREATED]\n" % character
+    elif response['ResponseMetadata']['HTTPStatusCode'] == 403:
+        message = "A character by that name already exists."
+    else:
+        message = "Something borked and the Character could not be created."
 
-    logger.info("response: {}".format(response))
-    return response
+    return message
+# END create_character
 
 
 
 def set_value(slack_username, channel, charval):
     '''Sets a stat of the character record passed'''
-    logger.info("slack_username: {}".format(slack_username))
-    logger.info("channel: {}".format(channel))
+    # logger.info("slack_username: {}".format(slack_username))
+    # logger.info("channel: {}".format(channel))
     character, key, value = charval[0], charval[1], charval[2]
     character_channel = character.lower() + channel.lower()
 
@@ -153,12 +138,22 @@ def set_value(slack_username, channel, charval):
             },
             ReturnValues="UPDATED_NEW"
         )
+        logger.info("response: {}".format(response))
     except ClientError as e:
         logger.info("Error: {}".format(e.response['Error']['Message']))
+        response = {'ResponseMetadata': {'HTTPStatusCode': 403}}
 
-    logger.info("response: {}".format(response))
-    return response
+    if response['ResponseMetadata']['HTTPStatusCode'] == 200:
+        message = "Value set!\n"
+        message += "CHARACTER: %s\n" % character
+        message += "%s: %s\n" % (key.upper(), value)
+    elif response['ResponseMetadata']['HTTPStatusCode'] == 403:
+        message = "You do not have permission."
+    else:
+        message = "Something borked and the value could not be set."
 
+    return message
+# END set_value
 
 
 def get_value(slack_username, channel, charval):
@@ -179,6 +174,7 @@ def get_value(slack_username, channel, charval):
         )
     except ClientError as e:
         print(e.response['Error']['Message'])
+        response = {'ResponseMetadata': {'HTTPStatusCode': 403}}
 
     if "Item" not in response:
         return "No such character."
@@ -202,7 +198,7 @@ def get_value(slack_username, channel, charval):
         message += k.upper() + ": " + response['Item']['stats'][k]
 
     return message
-
+# END get_value
 
 
 def del_value(slack_username, channel, charval):
@@ -216,7 +212,7 @@ def del_value(slack_username, channel, charval):
     elif key == "displayname":
         return {'ResponseMetadata': {'HTTPStatusCode': 'displayname'}}
     elif key == "owner_slackname":
-        return {'ResponseMetadata': {'HTTPStatusCode': 'owner'}}
+        return {'ResponseMetadata': {'HTTPStatusCode': 'owner_slackname'}}
 
     try:
         response = dbot.update_item(
@@ -226,16 +222,28 @@ def del_value(slack_username, channel, charval):
             UpdateExpression="REMOVE stats.%s" % key,
             ReturnValues="UPDATED_NEW"
         )
+        logger.info("response: {}".format(response))
     except ClientError as e:
-        print(e.response['Error']['Message'])
+        logger.info("Error: {}".format(e.response['Error']['Message']))
+        response = {'ResponseMetadata': {'HTTPStatusCode': 403}}
 
     if "Item" not in response:
-        return "No such character."
-    if response['Item']['stats']['owner_slackname'] != slack_username and response['Item']['stats']['gm'] != slack_username:
-        return "You are not the owner or the GM for that character."
+        message = "No such character."
+    elif response['Item']['stats']['owner_slackname'] != slack_username and response['Item']['stats']['gm'] != slack_username:
+        message = "You do not have permission to modify that character."
+    elif key == "displayname":
+        message = "Sorry, you can't delete that. You can `set` it to something else, but you will still need to reference your character by %s." % character
+    elif key == "owner_slackname":
+        message = "Sorry, you can't delete that."
+    elif response['ResponseMetadata']['HTTPStatusCode'] == 200:
+        message = "CHARACTER: %s\n" % character
+        message += "%s: (Deleted)\n" % key.upper()
+    elif response['ResponseMetadata']['HTTPStatusCode'] == "gm":
+        message = "GM has been reset. Now only %s can modify %s.\n" % (slack_username, character)
+    else:
+        message = "Something borked and the value could not be deleted."
 
-    logger.info("response: {}".format(response))
-    return response
+    return message
 
 
 
