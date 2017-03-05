@@ -70,7 +70,7 @@ def parse_command_text(username, channel, command_text):
             message = "Sorry, you can't delete displayname. You can `set` it to something else, but you will still need to reference your character by it's original name."
         elif response['ResponseMetadata']['HTTPStatusCode'] == "gm":
             message = "gm has been reset to %s. Now only %s can modify %s.\n" % (username, username, command_text[1])
-        elif response['ResponseMetadata']['HTTPStatusCode'] == "owner":
+        elif response['ResponseMetadata']['HTTPStatusCode'] == "owner_slackname":
             message = "Sorry, you can't delete the owner."
         else:
             message = "Something borked and the value could not be deleted."
@@ -116,7 +116,7 @@ def create_character(slack_username, channel, charval):
             Item={
                 'character_channel': character_channel,
                 'stats': {
-                    'owner': slack_username,
+                    'owner_slackname': slack_username,
                     'displayname': character,
                     'gm': game_master
                 }
@@ -145,7 +145,7 @@ def set_value(slack_username, channel, charval):
                 'character_channel': character_channel
             },
             UpdateExpression="set stats.%s = :v" % key,
-            ConditionExpression="stats.owner = %s OR stats.gm = %s" % (slack_username, slack_username),
+            ConditionExpression="stats.owner_slackname = %s OR stats.gm = %s" % (slack_username, slack_username),
             ExpressionAttributeValues={
                 ':v': value
             },
@@ -180,7 +180,7 @@ def get_value(slack_username, channel, charval):
 
     if "Item" not in response:
         return "No such character."
-    if response['Item']['stats']['owner'] != slack_username and response['Item']['stats']['gm'] != slack_username:
+    if response['Item']['stats']['owner_slackname'] != slack_username and response['Item']['stats']['gm'] != slack_username:
         return "You are not the owner or the GM for that character."
 
     logger.info("response: {}".format(response))
@@ -211,7 +211,7 @@ def del_value(slack_username, channel, charval):
         return {'ResponseMetadata': {'HTTPStatusCode': 'gm'}}
     elif key == "displayname":
         return {'ResponseMetadata': {'HTTPStatusCode': 'displayname'}}
-    elif key == "owner":
+    elif key == "owner_slackname":
         return {'ResponseMetadata': {'HTTPStatusCode': 'owner'}}
 
     try:
@@ -227,7 +227,7 @@ def del_value(slack_username, channel, charval):
 
     if "Item" not in response:
         return "No such character."
-    if response['Item']['stats']['owner'] != slack_username and response['Item']['stats']['gm'] != slack_username:
+    if response['Item']['stats']['owner_slackname'] != slack_username and response['Item']['stats']['gm'] != slack_username:
         return "You are not the owner or the GM for that character."
 
     logger.info("response: {}".format(response))
