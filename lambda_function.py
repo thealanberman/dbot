@@ -145,9 +145,10 @@ def set_value(slack_username, channel, charval):
                 'character_channel': character_channel
             },
             UpdateExpression="set stats.%s = :v" % key,
-            ConditionExpression="stats.owner_slackname = %s OR stats.gm = %s" % (slack_username, slack_username),
+            ConditionExpression="stats.owner_slackname = :slackuser OR stats.gm = :slackuser",
             ExpressionAttributeValues={
-                ':v': value
+                ':v': value,
+                ':slackuser': slack_username
             },
             ReturnValues="UPDATED_NEW"
         )
